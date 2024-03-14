@@ -1,0 +1,948 @@
+Program.Sub.Preflight.Start
+Program.External.Include.Library("1500.Lib")
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare(String,"")
+	V.Local.sPart.Declare(String,"")
+	V.Local.sSql.Declare(String,"")
+	V.Local.bRet.Declare(Boolean,False)
+	V.Local.sRouter.Declare(String,"")
+	V.Local.sType.Declare(String,"")
+	V.Local.sStatus.Declare(String,"")
+	V.Local.iQty.Declare(Long,0)
+	V.Local.sTemp.Declare(String,"")
+	'Adding this global variable to keep track of connection state (.state method errors if no connection is open)
+	'BM 1/6/21 
+	
+	'The Markups were pulling from the wrong columns in the get_cost sub, changed this to be correct -12/21/21 SS
+	V.Global.bIsOpen.Declare(Boolean, False)
+
+	F.Intrinsic.Control.SelectCase(V.Caller.Hook)
+		'Populate Hook Router Screen
+		F.Intrinsic.Control.Case(11010)	
+		
+			F.Intrinsic.Variable.SetProperty("GAB-CHK-1","PL",41)
+			F.Intrinsic.Variable.SetProperty("GAB-CHK-1","PT",192)
+			F.Intrinsic.Variable.SetProperty("GAB-CHK-1","PW",20)
+			F.Intrinsic.Variable.SetProperty("GAB-LBL-1","PL",60)
+			F.Intrinsic.Variable.SetProperty("GAB-LBL-1","PT",192)
+			F.Intrinsic.Variable.SetProperty("GAB-LBL-1","PW",75)
+			F.Intrinsic.UI.ChangeCallerProperty(V.Passed.GAB-CHK-1,"HIDE",0)
+			F.Intrinsic.UI.ChangeCallerProperty(V.Passed.GAB-LBL-1,"HIDE",0)
+			F.Intrinsic.UI.ChangeCallerProperty(V.Passed.GAB-CHK-1,"LOCK",0)
+			F.Intrinsic.UI.ChangeCallerProperty(V.Passed.GAB-LBL-1,"LOCK",0)
+			
+			V.Passed.GAB-LBL-1.Set("Don't Re-Price")
+			V.Passed.GAB-CHK-1.Set("N")
+	
+		'Save Hook Router Screen
+		F.Intrinsic.Control.Case(11090)
+			F.Intrinsic.Control.If(V.Passed.000014.Trim,<>,"")
+				F.ODBC.Connection!Con.OpenCompanyConnection
+				V.Global.bIsOpen.set(True)
+				
+				F.ODBC.Connection!Con.TableExists("GCG_5522_Reprice",V.Local.bRet)
+				
+				F.Intrinsic.Control.If(V.Local.bRet,=,False)
+					F.ODBC.Connection!Con.Execute("CREATE TABLE GCG_5522_Reprice (Router CHAR(20) NOT NULL, No_Reprice CHAR(1));")
+					F.ODBC.Connection!Con.Execute("CREATE INDEX GCG_5522_Reprice USING 1 ON GCG_5522_Reprice(Router);")
+				F.Intrinsic.Control.EndIf
+				
+				F.Intrinsic.String.RPad(V.Passed.000014.Trim," ",17,V.Local.sRouter)
+				F.Intrinsic.String.Build("{0}{1}",V.Local.sRouter,V.Passed.000015.Trim,V.Local.sRouter)
+				
+				F.Intrinsic.String.Build("Select Router, No_RePrice From GCG_5522_Reprice Where Router = '{0}'",V.Local.sRouter.Trim,V.Local.sSql)
+				
+				F.Data.DataTable.CreateFromSQL("RTR","con",V.Local.sSql,True)
+				
+				F.Intrinsic.Control.If(V.DataTable.RTR.RowCount--,<>,-1)
+					F.Data.DataTable.SetValue("RTR",-1,"No_Reprice",V.Passed.GAB-CHK-1)
+				F.Intrinsic.Control.Else
+					F.Data.DataTable.AddRow("RTR","Router",V.Local.sRouter.Trim,"NO_Reprice",V.Passed.GAB-CHK-1)
+				F.Intrinsic.Control.EndIf
+				
+				F.Data.DataTable.SaveToDB("RTR","con","GCG_5522_Reprice","Router",256,"Router@!@Router*!*No_Reprice@!@No_Reprice")
+				
+				F.ODBC.Connection!Con.Close
+				V.Global.bIsOpen.Set(False)
+			F.Intrinsic.Control.EndIf
+		'Adding to hook 11110 to replace 11020 adn 11030. Checkbox state was not being updated when Router Entry is populated using the Router Browser. This can replace logic attached to hook 11020, and 11030, as this hook also fires from those fields. 
+		'Otherwise you get both hooks firing
+		'BM 2/24/21
+		F.Intrinsic.Control.Case(11110)
+			F.Intrinsic.Control.If(V.Passed.000014.Trim,<>,"")
+				F.Intrinsic.String.RPad(V.Passed.000014.Trim," ",17,V.Local.sRouter)
+				F.Intrinsic.String.Build("{0}{1}",V.Local.sRouter,V.Passed.000015.Trim,V.Local.sRouter)
+				F.Intrinsic.String.Build("Select Router, No_RePrice From GCG_5522_Reprice Where Router = '{0}'",V.Local.sRouter.Trim,V.Local.sSql)
+			
+				F.ODBC.Connection!Con.OpenCompanyConnection
+				V.Global.bIsOpen.set(True)
+				
+				F.ODBC.Connection!Con.TableExists("GCG_5522_Reprice",V.Local.bRet)
+				
+				F.Intrinsic.Control.If(V.Local.bRet,=,False)
+					F.ODBC.Connection!Con.Execute("CREATE TABLE GCG_5522_Reprice (Router CHAR(20) NOT NULL, No_Reprice CHAR(1));")
+					F.ODBC.Connection!Con.Execute("CREATE INDEX GCG_5522_Reprice USING 1 ON GCG_5522_Reprice(Router);")
+				F.Intrinsic.Control.EndIf
+				
+				F.Data.DataTable.CreateFromSQL("RTR","con",V.Local.sSql,True)
+				
+				F.Intrinsic.Control.If(V.DataTable.RTR.RowCount--,<>,-1)
+					V.Passed.GAB-CHK-1.Set(V.DataTable.RTR(V.DataTable.RTR.RowCount--).No_Reprice!FieldValTrim)
+				F.Intrinsic.Control.Else
+					V.Passed.GAB-CHK-1.Set("N")
+				F.Intrinsic.Control.EndIf
+				
+				F.ODBC.Connection!Con.Close
+				V.Global.bIsOpen.set(False)
+			F.Intrinsic.Control.EndIf
+		'Router Hook
+'		F.Intrinsic.Control.Case(11020)
+'			F.Intrinsic.Control.If(V.Passed.000014.Trim,<>,"")
+'				F.Intrinsic.String.RPad(V.Passed.000014.Trim," ",17,V.Local.sRouter)
+'				F.Intrinsic.String.Build("{0}{1}",V.Local.sRouter,V.Passed.000015.Trim,V.Local.sRouter)
+'				F.Intrinsic.String.Build("Select Router, No_RePrice From GCG_5522_Reprice Where Router = '{0}'",V.Local.sRouter.Trim,V.Local.sSql)
+
+'				F.ODBC.Connection!Con.OpenCompanyConnection
+'				V.Global.bIsOpen.set(True)
+'				
+'				F.ODBC.Connection!Con.TableExists("GCG_5522_Reprice",V.Local.bRet)
+'				
+'				F.Intrinsic.Control.If(V.Local.bRet,=,False)
+'					F.ODBC.Connection!Con.Execute("CREATE TABLE GCG_5522_Reprice (Router CHAR(20) NOT NULL, No_Reprice CHAR(1));")
+'					F.ODBC.Connection!Con.Execute("CREATE INDEX GCG_5522_Reprice USING 1 ON GCG_5522_Reprice(Router);")
+'				F.Intrinsic.Control.EndIf
+'				
+'				F.Data.DataTable.CreateFromSQL("RTR","con",V.Local.sSql,True)
+'				
+'				F.Intrinsic.Control.If(V.DataTable.RTR.RowCount--,<>,-1)
+'					V.Passed.GAB-CHK-1.Set(V.DataTable.RTR(V.DataTable.RTR.RowCount--).No_Reprice!FieldValTrim)
+'				F.Intrinsic.Control.Else
+'					V.Passed.GAB-CHK-1.Set("N")
+'				F.Intrinsic.Control.EndIf
+'				
+'				F.ODBC.Connection!Con.Close
+'				V.Global.bIsOpen.set(False)
+'			F.Intrinsic.Control.EndIf
+
+		'Router REV Hook
+'		F.Intrinsic.Control.Case(11030)	
+'			F.Intrinsic.Control.If(V.Passed.000014.Trim,<>,"")
+'				F.Intrinsic.String.RPad(V.Passed.000014.Trim," ",17,V.Local.sRouter)
+'				F.Intrinsic.String.Build("{0}{1}",V.Local.sRouter,V.Passed.000015.Trim,V.Local.sRouter)
+'				F.Intrinsic.String.Build("Select Router, No_RePrice From GCG_5522_Reprice Where Router = '{0}'",V.Local.sRouter.Trim,V.Local.sSql)
+'			
+'				F.ODBC.Connection!Con.OpenCompanyConnection
+'				V.Global.bIsOpen.set(True)
+'				
+'				F.ODBC.Connection!Con.TableExists("GCG_5522_Reprice",V.Local.bRet)
+'				
+'				F.Intrinsic.Control.If(V.Local.bRet,=,False)
+'					F.ODBC.Connection!Con.Execute("CREATE TABLE GCG_5522_Reprice (Router CHAR(20) NOT NULL, No_Reprice CHAR(1));")
+'					F.ODBC.Connection!Con.Execute("CREATE INDEX GCG_5522_Reprice USING 1 ON GCG_5522_Reprice(Router);")
+'				F.Intrinsic.Control.EndIf
+'				
+'				F.Data.DataTable.CreateFromSQL("RTR","con",V.Local.sSql,True)
+'				
+'				F.Intrinsic.Control.If(V.DataTable.RTR.RowCount--,<>,-1)
+'					V.Passed.GAB-CHK-1.Set(V.DataTable.RTR(V.DataTable.RTR.RowCount--).No_Reprice!FieldValTrim)
+'				F.Intrinsic.Control.Else
+'					V.Passed.GAB-CHK-1.Set("N")
+'				F.Intrinsic.Control.EndIf
+'				
+'				F.ODBC.Connection!Con.Close
+'				V.Global.bIsOpen.set(False)
+'			F.Intrinsic.Control.EndIf
+			
+		'quote line screen
+		F.Intrinsic.Control.Case(10370)
+			'Part number Passed Variable - 000052
+			'Rev passed variable - 000053
+			'Quantity Passed Variable - 000007
+			'Price Passed Variable - 000009
+			'Cost Passed Variable - 000012		
+			
+			F.ODBC.Connection!Con.OpenCompanyConnection
+			V.Global.bIsOpen.set(True)
+			
+			F.ODBC.Connection!Con.TableExists("GCG_5522_Reprice",V.Local.bRet)
+				
+			F.Intrinsic.Control.If(V.Local.bRet,=,False)
+				F.ODBC.Connection!Con.Execute("CREATE TABLE GCG_5522_Reprice (Router CHAR(20) NOT NULL, No_Reprice CHAR(1));")
+				F.ODBC.Connection!Con.Execute("CREATE INDEX GCG_5522_Reprice USING 1 ON GCG_5522_Reprice(Router);")
+			F.Intrinsic.Control.EndIf
+				
+			F.Intrinsic.String.RPad(V.Passed.000052," ",17,V.Local.sPart)
+			F.Intrinsic.String.Build("{0}{1}",V.Local.sPart,V.Passed.000053.Trim,V.Local.sPart)
+			F.Intrinsic.String.Build("Select Router, No_RePrice From GCG_5522_Reprice Where Router = '{0}'",V.Local.sPart.Trim,V.Local.sSql)
+	
+			F.Data.DataTable.CreateFromSQL("RTR","con",V.Local.sSql,True)
+			F.ODBC.Connection!Con.Close
+			V.Global.bIsOpen.set(False)
+			F.Intrinsic.Control.If(V.DataTable.RTR.RowCount--,<>,-1)
+				F.Intrinsic.Control.If(V.DataTable.RTR(V.DataTable.RTR.RowCount--).No_Reprice!FieldValTrim,<>,"Y")
+					F.Intrinsic.UI.InvokeWaitDialog("Generating Cost/Price Buildup.........")
+					F.Intrinsic.String.Build("Select Top 1 Parent From V_Bom_Mstr Where Parent = '{0}'",V.Local.sPart,V.Local.sSql)
+					F.ODBC.Connection!Con.OpenCompanyConnection
+					V.Global.bIsOpen.set(True)
+					F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sSql)
+					F.ODBC.Connection!Con.Close
+					V.Global.bIsOpen.set(False)
+	
+					F.Intrinsic.Control.If(V.Local.sSql.Trim,<>,"")
+						
+						F.Global.Callwrapper.New("CostB","Manufacturing.BOM.CostBuildup")
+						F.Global.Callwrapper.SetProperty("CostB","Program","RE0100")
+						F.Global.Callwrapper.SetProperty("CostB","Flags","2")
+						F.Global.Callwrapper.SetProperty("CostB","Parent",V.Local.sPart.Trim)
+						F.Global.CallWrapper.Run("CostB")
+						V.Local.sType.Set("BOM")
+					F.Intrinsic.Control.Else
+						F.Data.DataTable.Create("Temp",True)
+						F.Data.DataTable.AddColumn("Temp","Qty","Long")
+						
+						V.Local.iQty.Set(V.Passed.000007)
+						
+						F.Intrinsic.String.Build("Select Quantity_1, Quantity_2, Quantity_3, Quantity_4 From V_RTR_Price_1_4 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+						F.ODBC.Connection!Con.OpenCompanyConnection
+						V.Global.bIsOpen.set(True)
+						F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+						F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+							F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+							V.Local.sTemp.RedimPreserve(0,3)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(2).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(3).Long)
+						F.Intrinsic.Control.EndIf
+						
+						F.Intrinsic.String.Build("Select Quantity_5, Quantity_6, Quantity_7, Quantity_8 From V_RTR_Price_5_8 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+						F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+						F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+							F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+							V.Local.sTemp.RedimPreserve(0,3)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(2).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(3).Long)
+						F.Intrinsic.Control.EndIf
+						
+						F.Intrinsic.String.Build("Select Quantity_9, Quantity_10 From V_RTR_Price_9_10 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+						F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+						F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+							F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+							V.Local.sTemp.RedimPreserve(0,1)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+						F.Intrinsic.Control.EndIf
+						
+						F.ODBC.Connection!Con.Close
+						V.Global.bIsOpen.set(False)
+						
+						F.Intrinsic.String.Build("Qty <= {0} and Qty <> 0",V.Passed.000007,V.Local.sTemp)
+						F.Data.DataView.Create("Temp","VTemp",22,V.Local.sTemp,"Qty")
+						
+						F.Intrinsic.Control.If(V.DataView.Temp!VTemp.RowCount--,<>,-1)
+							V.Local.iQty.Set(V.DataView.Temp!VTemp(V.DataView.Temp!VTemp.RowCount--).Qty!FieldValLong)
+						F.Intrinsic.Control.Else
+							F.Intrinsic.String.Build("Qty > {0}",V.Passed.000007,V.Local.sTemp)
+							F.Data.DataView.SetFilter("Temp","VTemp",V.Local.sTemp)
+							F.Data.DataView.SetSort("Temp","VTemp","Qty Desc")
+							F.Intrinsic.Control.If(V.DataView.Temp!VTemp.RowCount--,<>,-1)
+								V.Local.iQty.Set(V.DataView.Temp!VTemp(V.DataView.Temp!VTemp.RowCount--).Qty!FieldValLong)
+							F.Intrinsic.Control.EndIf
+						F.Intrinsic.Control.EndIf
+						
+						F.Data.DataView.Close("Temp","VTemp")
+						F.Data.DataTable.Close("Temp")
+						
+						F.Data.DataTable.AddRow("1500","ROUTER",V.Local.sPart.Trim,"Quantity",V.Local.iQty)
+						F.Intrinsic.Control.CallSub(1500sync)
+						V.Local.sType.Set("Router")
+					F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.CallSub(Get_Cost,"Part",V.Local.sPart,"Location",V.Passed.000054,"COST_ONLY","N","Type",V.Local.sType)
+					F.Intrinsic.UI.CloseWaitDialog
+				F.Intrinsic.Control.Else
+					F.Intrinsic.UI.InvokeWaitDialog("Generating Cost Buildup.........")
+					F.Intrinsic.String.Build("Select Top 1 Parent From V_Bom_Mstr Where Parent = '{0}'",V.Local.sPart,V.Local.sSql)
+					F.ODBC.Connection!Con.OpenCompanyConnection
+					V.Global.bIsOpen.set(True)
+					F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sSql)
+					F.ODBC.Connection!Con.Close
+					V.Global.bIsOpen.set(False)
+					F.Intrinsic.Control.If(V.Local.sSql.Trim,<>,"")
+						F.Global.Callwrapper.New("CostB","Manufacturing.BOM.CostBuildup")
+						F.Global.Callwrapper.SetProperty("CostB","Program","RE0100")
+						F.Global.Callwrapper.SetProperty("CostB","Flags","2")
+						F.Global.Callwrapper.SetProperty("CostB","Parent",V.Local.sPart.Trim)
+						F.Global.CallWrapper.Run("CostB")
+						V.Local.sType.Set("BOM")
+					F.Intrinsic.Control.Else
+						F.Data.DataTable.Create("Temp",True)
+						F.Data.DataTable.AddColumn("Temp","Qty","Long")
+						
+						V.Local.iQty.Set(V.Passed.000007)
+						
+						F.Intrinsic.String.Build("Select Quantity_1, Quantity_2, Quantity_3, Quantity_4 From V_RTR_Price_1_4 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+						F.ODBC.Connection!Con.OpenCompanyConnection
+						V.Global.bIsOpen.set(True)
+						F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+						F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+							F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+							V.Local.sTemp.RedimPreserve(0,3)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(2).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(3).Long)
+						F.Intrinsic.Control.EndIf
+						
+						F.Intrinsic.String.Build("Select Quantity_5, Quantity_6, Quantity_7, Quantity_8 From V_RTR_Price_5_8 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+						F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+						F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+							F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+							V.Local.sTemp.RedimPreserve(0,3)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(2).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(3).Long)
+						F.Intrinsic.Control.EndIf
+						
+						F.Intrinsic.String.Build("Select Quantity_9, Quantity_10 From V_RTR_Price_9_10 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+						F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+						F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+							F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+							V.Local.sTemp.RedimPreserve(0,1)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+						F.Intrinsic.Control.EndIf
+						
+						F.ODBC.Connection!Con.Close
+						V.Global.bIsOpen.set(False)
+						
+						F.Intrinsic.String.Build("Qty <= {0} and Qty <> 0",V.Passed.000007,V.Local.sTemp)
+						F.Data.DataView.Create("Temp","VTemp",22,V.Local.sTemp,"Qty")
+						
+						F.Intrinsic.Control.If(V.DataView.Temp!VTemp.RowCount--,<>,-1)
+							V.Local.iQty.Set(V.DataView.Temp!VTemp(V.DataView.Temp!VTemp.RowCount--).Qty!FieldValLong)
+						F.Intrinsic.Control.Else
+							F.Intrinsic.String.Build("Qty > {0}",V.Passed.000007,V.Local.sTemp)
+							F.Data.DataView.SetFilter("Temp","VTemp",V.Local.sTemp)
+							F.Data.DataView.SetSort("Temp","VTemp","Qty Desc")
+							F.Intrinsic.Control.If(V.DataView.Temp!VTemp.RowCount--,<>,-1)
+								V.Local.iQty.Set(V.DataView.Temp!VTemp(V.DataView.Temp!VTemp.RowCount--).Qty!FieldValLong)
+							F.Intrinsic.Control.EndIf
+						F.Intrinsic.Control.EndIf
+						
+						F.Data.DataView.Close("Temp","VTemp")
+						F.Data.DataTable.Close("Temp")
+						
+						F.Data.DataTable.AddRow("1500","ROUTER",V.Local.sPart.Trim,"Quantity",V.Local.iQty)
+						F.Intrinsic.Control.CallSub(1500sync)
+						V.Local.sType.Set("Router")
+					F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.CallSub(Get_Cost,"Part",V.Local.sPart,"Location",V.Passed.000054,"COST_ONLY","Y","Type",V.Local.sType)
+					F.Intrinsic.UI.CloseWaitDialog
+				F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.Else
+				F.Intrinsic.UI.InvokeWaitDialog("Generating Cost/Price Buildup.........")
+				F.Intrinsic.String.Build("Select Top 1 Parent From V_Bom_Mstr Where Parent = '{0}'",V.Local.sPart,V.Local.sSql)
+				F.ODBC.Connection!Con.OpenCompanyConnection
+				V.Global.bIsOpen.set(True)
+				F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sSql)
+				F.ODBC.Connection!Con.Close
+				V.Global.bIsOpen.set(False)
+				F.Intrinsic.Control.If(V.Local.sSql.Trim,<>,"")
+					F.Global.Callwrapper.New("CostB","Manufacturing.BOM.CostBuildup")
+					F.Global.Callwrapper.SetProperty("CostB","Program","RE0100")
+					F.Global.Callwrapper.SetProperty("CostB","Flags","2")
+					F.Global.Callwrapper.SetProperty("CostB","Parent",V.Local.sPart.Trim)
+					F.Global.CallWrapper.Run("CostB")
+					V.Local.sType.Set("BOM")
+				F.Intrinsic.Control.Else
+					F.Data.DataTable.Create("Temp",True)
+					F.Data.DataTable.AddColumn("Temp","Qty","Long")
+					
+					V.Local.iQty.Set(V.Passed.000007)
+					
+					F.Intrinsic.String.Build("Select Quantity_1, Quantity_2, Quantity_3, Quantity_4 From V_RTR_Price_1_4 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+					F.ODBC.Connection!Con.OpenCompanyConnection
+					V.Global.bIsOpen.set(True)
+					F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+					F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+						F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+						V.Local.sTemp.RedimPreserve(0,3)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(2).Long)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(3).Long)
+					F.Intrinsic.Control.EndIf
+					
+					F.Intrinsic.String.Build("Select Quantity_5, Quantity_6, Quantity_7, Quantity_8 From V_RTR_Price_5_8 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+					F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+					F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+						F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+						V.Local.sTemp.RedimPreserve(0,3)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(2).Long)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(3).Long)
+					F.Intrinsic.Control.EndIf
+					
+					F.Intrinsic.String.Build("Select Quantity_9, Quantity_10 From V_RTR_Price_9_10 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+					F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+					F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+						F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+						V.Local.sTemp.RedimPreserve(0,1)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+					F.Intrinsic.Control.EndIf
+					
+					F.ODBC.Connection!Con.Close
+					V.Global.bIsOpen.set(False)
+					
+					F.Intrinsic.String.Build("Qty <= {0} and Qty <> 0",V.Passed.000007,V.Local.sTemp)
+					F.Data.DataView.Create("Temp","VTemp",22,V.Local.sTemp,"Qty")
+					
+					F.Intrinsic.Control.If(V.DataView.Temp!VTemp.RowCount--,<>,-1)
+						V.Local.iQty.Set(V.DataView.Temp!VTemp(V.DataView.Temp!VTemp.RowCount--).Qty!FieldValLong)
+					F.Intrinsic.Control.Else
+						F.Intrinsic.String.Build("Qty > {0}",V.Passed.000007,V.Local.sTemp)
+						F.Data.DataView.SetFilter("Temp","VTemp",V.Local.sTemp)
+						F.Data.DataView.SetSort("Temp","VTemp","Qty Desc")
+						F.Intrinsic.Control.If(V.DataView.Temp!VTemp.RowCount--,<>,-1)
+							V.Local.iQty.Set(V.DataView.Temp!VTemp(V.DataView.Temp!VTemp.RowCount--).Qty!FieldValLong)
+						F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.EndIf
+					
+					F.Data.DataView.Close("Temp","VTemp")
+					F.Data.DataTable.Close("Temp")
+					
+					F.Data.DataTable.AddRow("1500","ROUTER",V.Local.sPart.Trim,"Quantity",V.Local.iQty)
+					F.Intrinsic.Control.CallSub(1500sync)
+					V.Local.sType.Set("Router")
+				F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.CallSub(Get_Cost,"Part",V.Local.sPart,"Location",V.Passed.000054,"COST_ONLY","N","Type",V.Local.sType)
+				F.Intrinsic.UI.CloseWaitDialog
+			F.Intrinsic.Control.EndIf
+			
+			F.Data.DataTable.Close("RTR")
+			
+		'SO line screen
+		F.Intrinsic.Control.Case(12120)
+			'Part number Passed Variable - 000052
+			'Rev passed variable - 000053
+			'Quantity Passed Variable - 000007
+			'Cost Passed Variable - 000012		
+			
+			F.Intrinsic.String.RPad(V.Passed.000052," ",17,V.Local.sPart)
+			F.Intrinsic.String.Build("{0}{1}",V.Local.sPart,V.Passed.000053.Trim,V.Local.sPart)
+			F.Intrinsic.String.Build("Select Router, No_RePrice From GCG_5522_Reprice Where Router = '{0}'",V.Local.sPart.Trim,V.Local.sSql)
+			F.ODBC.Connection!Con.OpenCompanyConnection
+			V.Global.bIsOpen.set(True)
+			F.Data.DataTable.CreateFromSQL("RTR","con",V.Local.sSql,True)
+			F.ODBC.Connection!Con.Close
+			V.Global.bIsOpen.set(False)
+			F.Intrinsic.Control.If(V.DataTable.RTR.RowCount--,<>,-1)
+				F.Intrinsic.Control.If(V.DataTable.RTR(V.DataTable.RTR.RowCount--).No_Reprice!FieldValTrim,<>,"Y")
+					F.Intrinsic.UI.InvokeWaitDialog("Generating Cost/Price Buildup.........")
+					F.Intrinsic.String.Build("Select Top 1 Parent From V_Bom_Mstr Where Parent = '{0}'",V.Local.sPart,V.Local.sSql)
+					F.ODBC.Connection!Con.OpenCompanyConnection
+					V.Global.bIsOpen.set(True)
+					F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sSql)
+					F.ODBC.Connection!Con.Close
+					V.Global.bIsOpen.set(False)
+	
+					F.Intrinsic.Control.If(V.Local.sSql.Trim,<>,"")
+						
+						F.Global.Callwrapper.New("CostB","Manufacturing.BOM.CostBuildup")
+						F.Global.Callwrapper.SetProperty("CostB","Program","RE0100")
+						F.Global.Callwrapper.SetProperty("CostB","Flags","2")
+						F.Global.Callwrapper.SetProperty("CostB","Parent",V.Local.sPart.Trim)
+						F.Global.CallWrapper.Run("CostB")
+						V.Local.sType.Set("BOM")
+					F.Intrinsic.Control.Else
+						F.Data.DataTable.Create("Temp",True)
+						F.Data.DataTable.AddColumn("Temp","Qty","Long")
+						
+						V.Local.iQty.Set(V.Passed.000007)
+						
+						F.Intrinsic.String.Build("Select Quantity_1, Quantity_2, Quantity_3, Quantity_4 From V_RTR_Price_1_4 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+						F.ODBC.Connection!Con.OpenCompanyConnection
+						V.Global.bIsOpen.set(True)
+						F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+						F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+							F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+							V.Local.sTemp.RedimPreserve(0,3)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(2).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(3).Long)
+						F.Intrinsic.Control.EndIf
+						
+						F.Intrinsic.String.Build("Select Quantity_5, Quantity_6, Quantity_7, Quantity_8 From V_RTR_Price_5_8 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+						F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+						F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+							F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+							V.Local.sTemp.RedimPreserve(0,3)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(2).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(3).Long)
+						F.Intrinsic.Control.EndIf
+						
+						F.Intrinsic.String.Build("Select Quantity_9, Quantity_10 From V_RTR_Price_9_10 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+						F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+						F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+							F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+							V.Local.sTemp.RedimPreserve(0,1)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+						F.Intrinsic.Control.EndIf
+						
+						F.ODBC.Connection!Con.Close
+						V.Global.bIsOpen.set(False)
+						
+						F.Intrinsic.String.Build("Qty <= {0} and Qty <> 0",V.Passed.000007,V.Local.sTemp)
+						F.Data.DataView.Create("Temp","VTemp",22,V.Local.sTemp,"Qty")
+						
+						F.Intrinsic.Control.If(V.DataView.Temp!VTemp.RowCount--,<>,-1)
+							V.Local.iQty.Set(V.DataView.Temp!VTemp(V.DataView.Temp!VTemp.RowCount--).Qty!FieldValLong)
+						F.Intrinsic.Control.Else
+							F.Intrinsic.String.Build("Qty > {0}",V.Passed.000007,V.Local.sTemp)
+							F.Data.DataView.SetFilter("Temp","VTemp",V.Local.sTemp)
+							F.Data.DataView.SetSort("Temp","VTemp","Qty Desc")
+							F.Intrinsic.Control.If(V.DataView.Temp!VTemp.RowCount--,<>,-1)
+								V.Local.iQty.Set(V.DataView.Temp!VTemp(V.DataView.Temp!VTemp.RowCount--).Qty!FieldValLong)
+							F.Intrinsic.Control.EndIf
+						F.Intrinsic.Control.EndIf
+						
+						F.Data.DataView.Close("Temp","VTemp")
+						F.Data.DataTable.Close("Temp")
+						
+						F.Data.DataTable.AddRow("1500","ROUTER",V.Local.sPart.Trim,"Quantity",V.Local.iQty)
+						F.Intrinsic.Control.CallSub(1500sync)
+						V.Local.sType.Set("Router")
+					F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.CallSub(Get_Cost,"Part",V.Local.sPart,"Location",V.Passed.000054,"COST_ONLY","N","Type",V.Local.sType)
+					F.Intrinsic.UI.CloseWaitDialog
+				F.Intrinsic.Control.Else
+					F.Intrinsic.UI.InvokeWaitDialog("Generating Cost Buildup.........")
+					F.Intrinsic.String.Build("Select Top 1 Parent From V_Bom_Mstr Where Parent = '{0}'",V.Local.sPart,V.Local.sSql)
+					F.ODBC.Connection!Con.OpenCompanyConnection
+					V.Global.bIsOpen.set(True)
+					F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sSql)
+					F.ODBC.Connection!Con.Close
+					V.Global.bIsOpen.set(False)
+					F.Intrinsic.Control.If(V.Local.sSql.Trim,<>,"")
+						F.Global.Callwrapper.New("CostB","Manufacturing.BOM.CostBuildup")
+						F.Global.Callwrapper.SetProperty("CostB","Program","RE0100")
+						F.Global.Callwrapper.SetProperty("CostB","Flags","2")
+						F.Global.Callwrapper.SetProperty("CostB","Parent",V.Local.sPart.Trim)
+						F.Global.CallWrapper.Run("CostB")
+						V.Local.sType.Set("BOM")
+					F.Intrinsic.Control.Else
+						F.Data.DataTable.Create("Temp",True)
+						F.Data.DataTable.AddColumn("Temp","Qty","Long")
+						
+						V.Local.iQty.Set(V.Passed.000007)
+						
+						F.Intrinsic.String.Build("Select Quantity_1, Quantity_2, Quantity_3, Quantity_4 From V_RTR_Price_1_4 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+						F.ODBC.Connection!Con.OpenCompanyConnection
+						V.Global.bIsOpen.set(True)
+						F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+						F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+							F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+							V.Local.sTemp.RedimPreserve(0,3)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(2).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(3).Long)
+						F.Intrinsic.Control.EndIf
+						
+						F.Intrinsic.String.Build("Select Quantity_5, Quantity_6, Quantity_7, Quantity_8 From V_RTR_Price_5_8 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+						F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+						F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+							F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+							V.Local.sTemp.RedimPreserve(0,3)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(2).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(3).Long)
+						F.Intrinsic.Control.EndIf
+						
+						F.Intrinsic.String.Build("Select Quantity_9, Quantity_10 From V_RTR_Price_9_10 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+						F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+						F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+							F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+							V.Local.sTemp.RedimPreserve(0,1)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+							F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+						F.Intrinsic.Control.EndIf
+						
+						F.ODBC.Connection!Con.Close
+						V.Global.bIsOpen.set(False)
+						
+						F.Intrinsic.String.Build("Qty <= {0} and Qty <> 0",V.Passed.000007,V.Local.sTemp)
+						F.Data.DataView.Create("Temp","VTemp",22,V.Local.sTemp,"Qty")
+						
+						F.Intrinsic.Control.If(V.DataView.Temp!VTemp.RowCount--,<>,-1)
+							V.Local.iQty.Set(V.DataView.Temp!VTemp(V.DataView.Temp!VTemp.RowCount--).Qty!FieldValLong)
+						F.Intrinsic.Control.Else
+							F.Intrinsic.String.Build("Qty > {0}",V.Passed.000007,V.Local.sTemp)
+							F.Data.DataView.SetFilter("Temp","VTemp",V.Local.sTemp)
+							F.Data.DataView.SetSort("Temp","VTemp","Qty Desc")
+							F.Intrinsic.Control.If(V.DataView.Temp!VTemp.RowCount--,<>,-1)
+								V.Local.iQty.Set(V.DataView.Temp!VTemp(V.DataView.Temp!VTemp.RowCount--).Qty!FieldValLong)
+							F.Intrinsic.Control.EndIf
+						F.Intrinsic.Control.EndIf
+						
+						F.Data.DataView.Close("Temp","VTemp")
+						F.Data.DataTable.Close("Temp")
+						
+						F.Data.DataTable.AddRow("1500","ROUTER",V.Local.sPart.Trim,"Quantity",V.Local.iQty)
+						F.Intrinsic.Control.CallSub(1500sync)
+						V.Local.sType.Set("Router")
+					F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.CallSub(Get_Cost,"Part",V.Local.sPart,"Location",V.Passed.000054,"COST_ONLY","Y","Type",V.Local.sType)
+					F.Intrinsic.UI.CloseWaitDialog
+				F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.Else
+				F.Intrinsic.UI.InvokeWaitDialog("Generating Cost/Price Buildup.........")
+				F.Intrinsic.String.Build("Select Top 1 Parent From V_Bom_Mstr Where Parent = '{0}'",V.Local.sPart,V.Local.sSql)
+				F.ODBC.Connection!Con.OpenCompanyConnection
+				V.Global.bIsOpen.set(True)
+				F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sSql)
+				F.ODBC.Connection!Con.Close
+				V.Global.bIsOpen.set(False)
+				F.Intrinsic.Control.If(V.Local.sSql.Trim,<>,"")
+					F.Global.Callwrapper.New("CostB","Manufacturing.BOM.CostBuildup")
+					F.Global.Callwrapper.SetProperty("CostB","Program","RE0100")
+					F.Global.Callwrapper.SetProperty("CostB","Flags","2")
+					F.Global.Callwrapper.SetProperty("CostB","Parent",V.Local.sPart.Trim)
+					F.Global.CallWrapper.Run("CostB")
+					V.Local.sType.Set("BOM")
+				F.Intrinsic.Control.Else
+					F.Data.DataTable.Create("Temp",True)
+					F.Data.DataTable.AddColumn("Temp","Qty","Long")
+					
+					V.Local.iQty.Set(V.Passed.000007)
+					
+					F.Intrinsic.String.Build("Select Quantity_1, Quantity_2, Quantity_3, Quantity_4 From V_RTR_Price_1_4 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+					F.ODBC.Connection!Con.OpenCompanyConnection
+					V.Global.bIsOpen.set(True)
+					F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+					F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+						F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+						V.Local.sTemp.RedimPreserve(0,3)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(2).Long)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(3).Long)
+					F.Intrinsic.Control.EndIf
+					
+					F.Intrinsic.String.Build("Select Quantity_5, Quantity_6, Quantity_7, Quantity_8 From V_RTR_Price_5_8 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+					F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+					F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+						F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+						V.Local.sTemp.RedimPreserve(0,3)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(2).Long)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(3).Long)
+					F.Intrinsic.Control.EndIf
+					
+					F.Intrinsic.String.Build("Select Quantity_9, Quantity_10 From V_RTR_Price_9_10 Where Router = '{0}'",V.Local.sPart,V.Local.sSql)
+					F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.sTemp)
+					F.Intrinsic.Control.If(V.Local.sTemp.Trim,<>,"")
+						F.Intrinsic.String.Split(V.Local.sTemp,"*!*",V.Local.sTemp)
+						V.Local.sTemp.RedimPreserve(0,1)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(0).Long)
+						F.Data.DataTable.AddRow("Temp","Qty",V.Local.sTemp(1).Long)
+					F.Intrinsic.Control.EndIf
+					
+					F.ODBC.Connection!Con.Close
+					V.Global.bIsOpen.set(False)
+					
+					F.Intrinsic.String.Build("Qty <= {0} and Qty <> 0",V.Passed.000007,V.Local.sTemp)
+					F.Data.DataView.Create("Temp","VTemp",22,V.Local.sTemp,"Qty")
+					
+					F.Intrinsic.Control.If(V.DataView.Temp!VTemp.RowCount--,<>,-1)
+						V.Local.iQty.Set(V.DataView.Temp!VTemp(V.DataView.Temp!VTemp.RowCount--).Qty!FieldValLong)
+					F.Intrinsic.Control.Else
+						F.Intrinsic.String.Build("Qty > {0}",V.Passed.000007,V.Local.sTemp)
+						F.Data.DataView.SetFilter("Temp","VTemp",V.Local.sTemp)
+						F.Data.DataView.SetSort("Temp","VTemp","Qty Desc")
+						F.Intrinsic.Control.If(V.DataView.Temp!VTemp.RowCount--,<>,-1)
+							V.Local.iQty.Set(V.DataView.Temp!VTemp(V.DataView.Temp!VTemp.RowCount--).Qty!FieldValLong)
+						F.Intrinsic.Control.EndIf
+					F.Intrinsic.Control.EndIf
+					
+					F.Data.DataView.Close("Temp","VTemp")
+					F.Data.DataTable.Close("Temp")
+					
+					F.Data.DataTable.AddRow("1500","ROUTER",V.Local.sPart.Trim,"Quantity",V.Local.iQty)
+					F.Intrinsic.Control.CallSub(1500sync)
+					V.Local.sType.Set("Router")
+				F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.CallSub(Get_Cost,"Part",V.Local.sPart,"Location",V.Passed.000054,"COST_ONLY","N","Type",V.Local.sType)
+				F.Intrinsic.UI.CloseWaitDialog
+			F.Intrinsic.Control.EndIf
+			
+			F.Data.DataTable.Close("RTR")
+			
+	F.Intrinsic.Control.EndSelect
+	
+	F.Intrinsic.Control.CallSub(Exit)
+	
+	F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+		F.Intrinsic.String.Build("Project: {0}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}","GCG_5522_Qte_OE_Cost.g2u",V.Ambient.NewLine,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.CallSub(Exit)
+	F.Intrinsic.Control.EndIf
+Function.Intrinsic.Control.EndTry
+Program.Sub.Main.End
+
+Program.Sub.Exit.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare(String,"")
+	'Using this errors out if no connection is open already 
+	
+	'checking if connection is open and closing before ending program
+	'F.Intrinsic.Control.If(V.ODBC.Con.State,=,1)
+	'	F.ODBC.Connection!Con.Close
+	'F.Intrinsic.Control.EndIf
+	
+	'BM 1/6/21 
+	F.Intrinsic.Control.If(V.Global.bIsOpen, =, True)
+		F.ODBC.Connection!Con.Close
+		V.Global.bIsOpen.Set(False)
+	F.Intrinsic.Control.EndIf
+	
+	'closing program
+	F.Intrinsic.Control.End
+	
+	F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+		F.Intrinsic.String.Build("Project: {0}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}","GCG_5522_Qte_OE_Cost.g2u",V.Ambient.NewLine,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.End
+	F.Intrinsic.Control.EndIf
+Function.Intrinsic.Control.EndTry
+Program.Sub.Exit.End
+
+Program.Sub.Get_Cost.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare(String,"")
+	V.Local.sPart.Declare(String,"")
+	V.Local.sFile.Declare(String,"")
+	V.Local.sLocation.Declare(String,"")
+	V.Local.sSql.Declare(String,"")
+	V.Local.fAlt_Cost.Declare(Float,0)
+	V.Local.fMat.Declare(Float,0)
+	V.Local.fOut.Declare(Float,0)
+	V.Local.fLab.Declare(Float,0)
+	V.Local.fTotalCost.Declare(Float,0)
+	V.Local.fMrkUpMat.Declare(Float,0)
+	V.Local.fMrkUpOut.Declare(Float,0)
+	V.Local.fMrkUpLab.Declare(Float,0)
+	V.Local.fPrice.Declare(Float,0)
+	V.Local.fMarkUp.Declare(Float,0)
+	V.Local.fOver.Declare(Float,0)
+	V.Local.sStatus.Declare(String,"")
+	
+	F.Intrinsic.Control.If(V.Args.Type.UCase,=,"ROUTER")
+	
+		'get the output file from the router biuld up and put it in a datatable(s)
+		F.Intrinsic.String.Build("{0}\{1}{2}PRICING.OUT",v.Caller.FilesDir,v.Caller.User.Trim,v.Caller.Terminal.Trim,v.Local.sFile)
+		F.Intrinsic.File.File2String(V.Local.sFile,V.Local.sPart)
+		
+		F.Data.DataTable.CreateFromString("ROUTER",V.Local.sPart,"TYPE*!*ROUTER*!*QTY*!*DIR_COST*!*COST*!*MATERIAL*!*OUTSIDE*!*LABOR*!*LABOR_HOURS*!*OVERHEAD*!*TIME_QTY*!*GP%-1*!*PRICE-1*!*GP%-2*!*PRICE-2*!*GP%-3*!*PRICE-3*!*GP%-4*!*PRICE-4*!*SELL3","STRING*!*STRING*!*STRING*!*STRING*!*STRING*!*STRING*!*STRING*!*STRING*!*STRING*!*STRING*!*STRING*!*STRING*!*STRING*!*STRING*!*STRING*!*STRING*!*STRING*!*STRING*!*STRING*!*STRING","*!*",V.Ambient.NewLine,True)
+	    F.Intrinsic.Control.If(V.DataTable.ROUTER.RowCount--,>,0)
+		    'Type M = Markup  Marterial markup Columns(Router, Qty, Dir_Cost, Cost), Outside markup columns(Material, Outside, Labor, Labor_Hours), Labor markup columns(Overhead, Time_Qty, GP%-1, Price-1)
+		    'Type T = Total, Material = Material Column, Outside = Outside Column, Labor&Overhead = Labor Column + Overhead Column
+		    F.Data.DataView.Create("Router","TRouter",22,"Type = 'T'","")
+		    F.Data.DataView.Create("Router","MRouter",22,"Type = 'M'","")
+		    V.Local.fMat.Set(V.DataView.ROUTER!TRouter(V.DataView.ROUTER!TRouter.RowCount--).Material!FieldVal)
+		    V.Local.fOut.Set(V.DataView.ROUTER!TRouter(V.DataView.ROUTER!TRouter.RowCount--).Outside!FieldVal)
+		    F.Intrinsic.Math.Add(V.DataView.ROUTER!TRouter(V.DataView.ROUTER!TRouter.RowCount--).Labor!FieldVal,V.DataView.ROUTER!TRouter(V.DataView.ROUTER!TRouter.RowCount--).Overhead!FieldVal,V.Local.fLab)
+		    V.Local.fTotalCost.Set(V.DataView.ROUTER!TRouter(V.DataView.ROUTER!TRouter.RowCount--).Cost!FieldVal)
+		    
+		    'The Markups were pulling from the wrong columns, changed this to be correct -12/21/21 SS
+		    'F.Intrinsic.Math.Mult(V.Local.fMat,V.DataView.ROUTER!MRouter(V.DataView.ROUTER!MRouter.RowCount--).Cost!FieldVal,V.Local.fMrkUpMat)
+		    F.Intrinsic.Math.Mult(V.Local.fMat,V.DataView.ROUTER!MRouter(V.DataView.ROUTER!MRouter.RowCount--).Labor_Hours!FieldVal,V.Local.fMrkUpMat)
+		    'F.Intrinsic.Math.Mult(V.Local.fOut,V.DataView.ROUTER!MRouter(V.DataView.ROUTER!MRouter.RowCount--).Labor_Hours!FieldVal,V.Local.fMrkUpOut)
+		    F.Intrinsic.Math.Mult(V.Local.fOut,V.DataView.ROUTER!MRouter(V.DataView.ROUTER!MRouter.RowCount--).Price-1!FieldVal,V.Local.fMrkUpOut)
+		    'F.Intrinsic.Math.Mult(V.Local.fLab,V.DataView.ROUTER!MRouter(V.DataView.ROUTER!MRouter.RowCount--).Price-1!FieldVal,V.Local.fMrkUpLab)
+		    F.Intrinsic.Math.Mult(V.Local.fLab,V.DataView.ROUTER!MRouter(V.DataView.ROUTER!MRouter.RowCount--).Cost!FieldVal,V.Local.fMrkUpLab)
+		    F.Intrinsic.Math.Add(V.Local.fMrkUpLab,V.Local.fMrkUpMat,V.Local.fMrkUpOut,V.Local.fPrice)
+	
+		F.Intrinsic.Control.Else
+			'no router cost buildup so use the alt cost from Inventory Mstr
+			V.Local.sPart.Set(V.Args.Part)
+			V.Local.sLocation.Set(V.Args.Location)
+			F.Intrinsic.String.Build("Select Amt_Alt_Cost From V_Inventory_Mstr Where Part = '{0}' And Location = '{1}'",V.Local.sPart.Trim,V.Local.sLocation.Trim,V.Local.sSql)
+			F.ODBC.Connection!Con.OpenCompanyConnection
+			V.Global.bIsOpen.set(True)
+			F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.fAlt_Cost)
+			F.ODBC.Connection!Con.Close
+			V.Global.bIsOpen.Set(False)
+			'If Alt Cost is greater than 0 will use alt cost to update if not do nothing
+			F.Intrinsic.Control.If(V.Local.fAlt_Cost,>,0)
+				V.Local.fTotalCost.Set(V.Local.fAlt_Cost)
+				F.ODBC.Connection!Con.OpenCompanyConnection
+				V.Global.bIsOpen.set(True)
+					F.ODBC.Connection!Con.ExecuteAndReturn("Select Material_5 From V_MarkUp_Pct",V.Local.fMarkUp)
+					F.Intrinsic.Control.If(V.Local.fMarkUp,>,0)
+						F.Intrinsic.Math.Mult(V.Local.fAlt_Cost,V.Local.fMarkUp,V.Local.fPrice)
+					F.Intrinsic.Control.Else
+						V.Local.fPrice.Set(V.Local.fAlt_Cost)
+					F.Intrinsic.Control.EndIf
+				F.ODBC.Connection!Con.Close
+				V.Global.bIsOpen.Set(False)
+			F.Intrinsic.Control.Else
+				V.Local.sPart.Set(V.Args.Part)
+				V.Local.sLocation.Set(V.Args.Location)
+		    	F.Intrinsic.String.Build("Select Cost From V_Inventory_Cost Where Part = '{0}' And Locn = '{1}'",V.Local.sPart.Trim,V.Local.sLocation.Trim,V.Local.sSql)
+				F.ODBC.Connection!Con.OpenCompanyConnection
+				V.Global.bIsOpen.set(True)
+				F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.fAlt_Cost)
+				F.ODBC.Connection!Con.Close
+				V.Global.bIsOpen.Set(False)
+				V.Local.fTotalCost.Set(V.Local.fAlt_Cost)
+				F.ODBC.Connection!Con.OpenCompanyConnection
+				V.Global.bIsOpen.set(True)
+					F.ODBC.Connection!Con.ExecuteAndReturn("Select Material_5 From V_MarkUp_Pct",V.Local.fMarkUp)
+					F.Intrinsic.Control.If(V.Local.fMarkUp,>,0)
+						F.Intrinsic.Math.Mult(V.Local.fAlt_Cost,V.Local.fMarkUp,V.Local.fPrice)
+					F.Intrinsic.Control.Else
+						V.Local.fPrice.Set(V.Local.fAlt_Cost)
+					F.Intrinsic.Control.EndIf
+				F.ODBC.Connection!Con.Close
+				V.Global.bIsOpen.Set(False)
+			F.Intrinsic.Control.EndIf
+	    F.Intrinsic.Control.EndIf
+    F.Intrinsic.Control.Else
+    	F.Global.CallWrapper.GetProperty("CostB","Status",V.Local.sStatus)
+    	F.Intrinsic.Control.If(V.Local.sStatus.UCase,=,"SUCCESS")
+    		F.ODBC.Connection!Con.OpenCompanyConnection
+    		V.Global.bIsOpen.set(True)
+    		
+'			F.Intrinsic.String.Build("select Top 1 Parent_Qty_2 from BI_BOM_BUILDUP_E where {0} <= Parent_Qty_1 and Rec_Type = 'U' and Trmnl = '{1}' and Rptid = '004203' Order by Parent_Qty_1",V.Passed.000007,V.Caller.Terminal,V.Local.sSql)
+'			F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.fPrice)
+'			F.Intrinsic.Control.If(V.Local.fPrice,=,0)
+				F.Intrinsic.String.Build("select Top 1 Parent_Qty_2 from BI_BOM_BUILDUP_E where {0} >= Parent_Qty_1 and Rec_Type = 'U' and Trmnl = '{1}' and Rptid = '004203' Order by Parent_Qty_1 Desc",V.Passed.000007,V.Caller.Terminal,V.Local.sSql)
+				F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.fPrice)
+'			F.Intrinsic.Control.EndIf
+			V.Local.fTotalCost.Set(V.Local.fPrice)
+'			F.Intrinsic.String.Build("select Top 1 Parent_Qty_6 from BI_BOM_BUILDUP_E where {0} <= Parent_Qty_1 and Rec_Type = 'U' and Trmnl = '{1}' and Rptid = '004203' Order by Parent_Qty_1",V.Passed.000007,V.Caller.Terminal,V.Local.sSql)
+'			F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.fPrice)
+'			F.Intrinsic.Control.If(V.Local.fPrice,=,0)
+				F.Intrinsic.String.Build("select Top 1 Parent_Qty_6 from BI_BOM_BUILDUP_E where {0} >= Parent_Qty_1 and Rec_Type = 'U' and Trmnl = '{1}' and Rptid = '004203' Order by Parent_Qty_1 Desc",V.Passed.000007,V.Caller.Terminal,V.Local.sSql)
+				F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.fPrice)
+'			F.Intrinsic.Control.EndIf
+			F.ODBC.Connection!Con.Close
+			V.Global.bIsOpen.Set(False)
+    	F.Intrinsic.Control.Else
+    		'no router cost buildup so use the alt cost from Inventory Mstr
+			V.Local.sPart.Set(V.Args.Part)
+			V.Local.sLocation.Set(V.Args.Location)
+			F.Intrinsic.String.Build("Select Amt_Alt_Cost From V_Inventory_Mstr Where Part = '{0}' And Location = '{1}'",V.Local.sPart.Trim,V.Local.sLocation.Trim,V.Local.sSql)
+			F.ODBC.Connection!Con.OpenCompanyConnection
+			V.Global.bIsOpen.set(True)
+			F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.fAlt_Cost)
+			F.ODBC.Connection!Con.Close
+			V.Global.bIsOpen.Set(False)
+			'If Alt Cost is greater than 0 will use alt cost to update if not do nothing
+			F.Intrinsic.Control.If(V.Local.fAlt_Cost,>,0)
+				V.Local.fTotalCost.Set(V.Local.fAlt_Cost)
+				F.ODBC.Connection!Con.OpenCompanyConnection
+				V.Global.bIsOpen.set(True)
+					F.ODBC.Connection!Con.ExecuteAndReturn("Select Material_5 From V_MarkUp_Pct",V.Local.fMarkUp)
+					F.Intrinsic.Control.If(V.Local.fMarkUp,>,0)
+						F.Intrinsic.Math.Mult(V.Local.fAlt_Cost,V.Local.fMarkUp,V.Local.fPrice)
+					F.Intrinsic.Control.Else
+						V.Local.fPrice.Set(V.Local.fAlt_Cost)
+					F.Intrinsic.Control.EndIf
+				F.ODBC.Connection!Con.Close
+				V.Global.bIsOpen.Set(False)
+			F.Intrinsic.Control.Else
+				V.Local.sPart.Set(V.Args.Part)
+				V.Local.sLocation.Set(V.Args.Location)
+		    	F.Intrinsic.String.Build("Select Cost From V_Inventory_Cost Where Part = '{0}' And Locn = '{1}'",V.Local.sPart.Trim,V.Local.sLocation.Trim,V.Local.sSql)
+				F.ODBC.Connection!Con.OpenCompanyConnection
+				V.Global.bIsOpen.set(True)
+				F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,V.Local.fAlt_Cost)
+				F.ODBC.Connection!Con.Close
+				V.Global.bIsOpen.Set(False)
+				V.Local.fTotalCost.Set(V.Local.fAlt_Cost)
+				F.ODBC.Connection!Con.OpenCompanyConnection
+				V.Global.bIsOpen.set(True)
+					F.ODBC.Connection!Con.ExecuteAndReturn("Select Material_5 From V_MarkUp_Pct",V.Local.fMarkUp)
+					F.Intrinsic.Control.If(V.Local.fMarkUp,>,0)
+						F.Intrinsic.Math.Mult(V.Local.fAlt_Cost,V.Local.fMarkUp,V.Local.fPrice)
+					F.Intrinsic.Control.Else
+						V.Local.fPrice.Set(V.Local.fAlt_Cost)
+					F.Intrinsic.Control.EndIf
+				F.ODBC.Connection!Con.Close
+				V.Global.bIsOpen.Set(False)
+			F.Intrinsic.Control.EndIf
+    	F.Intrinsic.Control.EndIf
+    F.Intrinsic.Control.EndIf
+    
+ 	F.Intrinsic.Control.If(V.Local.fPrice,>,0,"OR",V.Local.fTotalCost,>,0)
+    	F.Intrinsic.Control.If(V.Args.COST_ONLY,=,"N")
+    		V.Passed.000009.Set(V.Local.fPrice)
+    	F.Intrinsic.Control.Else
+			'getting last price of part from  quote
+			F.Intrinsic.String.Build("Select Top 1 Price From V_Quote_Lines Where Part = '{0}' and Location = '{1}' Order by Date_Quote Desc",V.Args.Part.Trim,V.Args.Location.Trim,V.Local.sSql)
+			F.ODBC.Connection!Con.OpenCompanyConnection
+			V.Global.bIsOpen.set(True)
+			F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,v.Local.sSql)
+			F.Intrinsic.Control.If(V.Local.sSql.Trim,<>,"")
+				V.Passed.000009.Set(V.Local.sSql.Float)
+			F.Intrinsic.Control.Else
+				'look at SO's
+				F.Intrinsic.String.Build("Select Top 1 Price From V_Order_Lines Where Part = '{0}' and Location = '{1}' Order by Date_Order Desc",V.Args.Part.Trim,V.Args.Location.Trim,V.Local.sSql)
+				F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,v.Local.sSql)
+				F.Intrinsic.Control.If(V.Local.sSql.Trim,<>,"")
+					V.Passed.000009.Set(V.Local.sSql.Float)
+				F.Intrinsic.Control.Else
+					'look at so hist
+					F.Intrinsic.String.Build("Select Top 1 Price From V_Order_Hist_Line Where Part = '{0}' and Location = '{1}' Order by Date_Order Desc",V.Args.Part.Trim,V.Args.Location.Trim,V.Local.sSql)
+					F.ODBC.Connection!Con.ExecuteAndReturn(V.Local.sSql,v.Local.sSql)
+					F.Intrinsic.Control.If(V.Local.sSql.Trim,<>,"")
+						V.Passed.000009.Set(V.Local.sSql.Float)
+					F.Intrinsic.Control.Else
+						'setting price to router build up price
+						V.Passed.000009.Set(V.Local.fPrice)
+					F.Intrinsic.Control.EndIf
+				F.Intrinsic.Control.EndIf
+			F.Intrinsic.Control.EndIf
+			F.ODBC.Connection!Con.Close
+			V.Global.bIsOpen.Set(False)
+		F.Intrinsic.Control.EndIf
+    	V.Passed.000012.Set(V.Local.fTotalCost)
+    F.Intrinsic.Control.EndIf
+	    	
+	F.Intrinsic.Control.ExitSub
+
+F.Intrinsic.Control.Catch
+	F.Intrinsic.Control.If(V.Ambient.ErrorNumber,<>,0)
+		F.Intrinsic.String.Build("Project: {0}{1}Subroutine: {2}{1}Error Occurred {3} with description {4}","GCG_5522_Qte_OE_Cost.g2u",V.Ambient.NewLine,V.Ambient.CurrentSubroutine,V.Ambient.ErrorNumber,V.Ambient.ErrorDescription,V.Local.sError)
+		F.Intrinsic.UI.Msgbox(V.Local.sError)
+		F.Intrinsic.Control.CallSub(Exit)
+	F.Intrinsic.Control.EndIf
+Function.Intrinsic.Control.EndTry
+Program.Sub.Get_Cost.End
+
+Program.Sub.Comments.Start
+${$5$}$2.0.0.0$}$2
+${$6$}$bmedina$}$20210226093929991$}$kOipCrsyLBVj2KoSwkcdK23ChxGVcBlExlohuFAkL1JW3T3042ZQ4V4cM5GokKgzW3UbepxZfo8=
+Program.Sub.Comments.End
